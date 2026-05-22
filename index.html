@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QuizLive</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pusher/8.3.0/pusher.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0f0f1a;color:#fff;min-height:100vh;overflow-x:hidden}
+.screen{display:none;min-height:100vh}.screen.active{display:flex;flex-direction:column}
+.ring-wrap{position:relative;width:80px;height:80px;flex-shrink:0}
+.ring-wrap svg{position:absolute;top:0;left:0;transform:rotate(-90deg)}
+.ring-bg{fill:none;stroke:#2a2a3e;stroke-width:6}
+.ring-fg{fill:none;stroke-width:6;stroke-linecap:round;transition:stroke-dashoffset 1s linear,stroke .5s}
+.ring-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:1.4rem;font-weight:900}
+#home{align-items:center;justify-content:center;gap:1.5rem;padding:2rem}
+.logo{font-size:3rem;font-weight:900;letter-spacing:-2px}.logo span{color:#ff6b6b}
+.home-btns{display:flex;gap:1rem;flex-wrap:wrap;justify-content:center}
+.btn{padding:.9rem 2rem;border:none;border-radius:12px;font-size:1rem;font-weight:700;cursor:pointer;transition:transform .1s,opacity .2s}
+.btn:hover{opacity:.9;transform:translateY(-2px)}.btn:active{transform:scale(.97)}
+.btn-primary{background:#ff6b6b;color:#fff}.btn-secondary{background:#4ecdc4;color:#0f0f1a}
+.btn-dark{background:#2a2a3e;color:#fff}.btn-sm{padding:.5rem 1rem;font-size:.85rem}
+.api-box{background:#1e1e2e;border-radius:14px;padding:1.1rem;width:100%;max-width:460px;display:flex;flex-direction:column;gap:.6rem}
+.api-box label{font-size:.75rem;color:#aaa;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.api-box input{background:#2a2a3e;border:1.5px solid #3a3a5e;border-radius:8px;color:#fff;padding:.55rem .8rem;font-size:.85rem;font-family:monospace;width:100%;transition:border-color .2s}
+.api-box input.ok{border-color:#4ecdc4}.api-box input.err{border-color:#ff6b6b}
+.api-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+.api-status{font-size:.78rem;min-height:1.2em;display:flex;align-items:center;gap:.4rem}
+.api-status.ok{color:#4ecdc4}.api-status.err{color:#ff6b6b}.api-status.idle{color:#555}
+.panel{background:#1e1e2e;border-radius:16px;padding:1.25rem}
+.panel h2{font-size:.8rem;color:#aaa;margin-bottom:1rem;text-transform:uppercase;letter-spacing:1px}
+.field{display:flex;flex-direction:column;gap:.4rem;margin-bottom:.8rem}
+.field label{font-size:.8rem;color:#aaa}
+.field input,.field textarea,.field select{background:#2a2a3e;border:1px solid #3a3a5e;border-radius:8px;color:#fff;padding:.6rem .8rem;font-size:.95rem;width:100%}
+.field textarea{resize:vertical;min-height:60px}
+.answers-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+.answer-field{display:flex;gap:.4rem;align-items:center}
+.answer-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.answer-field input{flex:1;background:#2a2a3e;border:1px solid #3a3a5e;border-radius:8px;color:#fff;padding:.5rem;font-size:.85rem}
+.correct-check{background:none;border:none;cursor:pointer;font-size:1.1rem;color:#aaa}
+.correct-check.on{color:#4ecdc4}
+.q-list{display:flex;flex-direction:column;gap:.5rem;max-height:180px;overflow-y:auto}
+.q-item{background:#2a2a3e;border-radius:8px;padding:.6rem .8rem;font-size:.85rem;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+.q-item:hover{background:#3a3a5e}
+.q-num{background:#ff6b6b;color:#fff;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;flex-shrink:0}
+.toolbar{display:flex;gap:.5rem;flex-wrap:wrap}.tag{background:#2a2a3e;border-radius:6px;padding:2px 8px;font-size:.75rem;color:#aaa}
+.img-upload-area{border:2px dashed #3a3a5e;border-radius:12px;padding:1rem;text-align:center;cursor:pointer;position:relative;overflow:hidden}
+.img-upload-area:hover{border-color:#ff6b6b}
+.img-upload-area input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.img-preview{width:100%;max-height:120px;object-fit:cover;border-radius:8px;margin-top:.5rem;display:none}
+#host-lobby{align-items:center;justify-content:center;gap:1.2rem;padding:1.5rem;text-align:center}
+.game-pin{font-size:4rem;font-weight:900;letter-spacing:4px;color:#ff6b6b}
+#qr-container{background:#fff;padding:12px;border-radius:12px;display:inline-block}
+.players-grid{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;max-width:600px}
+.player-badge{background:#2a2a3e;border-radius:8px;padding:.5rem 1rem;font-size:.9rem;font-weight:600;animation:pop .3s ease}
+@keyframes pop{0%{transform:scale(.5);opacity:0}100%{transform:scale(1);opacity:1}}
+#host-game{padding:1rem;gap:.8rem}
+.big-question{font-size:1.3rem;font-weight:700;text-align:center;padding:1.2rem;background:#1e1e2e;border-radius:16px}
+.q-image-host,.q-image-player{width:100%;max-height:180px;object-fit:cover;border-radius:12px;display:none}
+.answers-host{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
+.ans-btn{border:none;border-radius:12px;padding:1rem;font-size:.95rem;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:.5rem;transition:opacity .3s}
+.answer-count{text-align:center;font-size:2.5rem;font-weight:900;color:#4ecdc4;line-height:1}
+.answer-sublabel{text-align:center;color:#aaa;font-size:.85rem}
+.live-scores{background:#1e1e2e;border-radius:12px;padding:1rem}
+.score-row{display:flex;justify-content:space-between;padding:.35rem 0;border-bottom:1px solid #2a2a3e;font-size:.9rem}
+.score-row:last-child{border:none}
+#player-join{align-items:center;justify-content:center;gap:1.5rem;padding:2rem}
+.pin-input{font-size:2.5rem;font-weight:900;text-align:center;background:#1e1e2e;border:2px solid #3a3a5e;border-radius:16px;color:#fff;padding:1rem;width:100%;max-width:320px;letter-spacing:6px}
+.name-input{font-size:1.2rem;text-align:center;background:#1e1e2e;border:2px solid #3a3a5e;border-radius:16px;color:#fff;padding:.8rem 1rem;width:100%;max-width:320px}
+#player-wait{align-items:center;justify-content:center;gap:1rem;padding:2rem;text-align:center}
+.wait-name{font-size:1.5rem;font-weight:700;color:#4ecdc4}
+.pulse{animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+#player-answer{padding:1rem;gap:.8rem}
+.player-q{font-size:1rem;font-weight:600;background:#1e1e2e;border-radius:12px;padding:1rem;text-align:center}
+.player-answers{display:grid;grid-template-columns:1fr 1fr;gap:.8rem;flex:1}
+.player-ans-btn{border:none;border-radius:16px;padding:1.2rem .8rem;font-size:.95rem;font-weight:700;cursor:pointer;transition:transform .1s,opacity .2s;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;min-height:90px;gap:.3rem}
+.player-ans-btn:active{transform:scale(.95)}.player-ans-btn:disabled{cursor:default}
+.pa-0{background:#e94e77}.pa-1{background:#4ecdc4;color:#0f0f1a}.pa-2{background:#ffe66d;color:#1a1a1a}.pa-3{background:#a29bfe}
+#player-result{align-items:center;justify-content:center;gap:1.2rem;padding:2rem;text-align:center}
+.result-icon{font-size:5rem}.result-score{font-size:2rem;font-weight:900;color:#4ecdc4}
+#leaderboard{align-items:center;justify-content:center;gap:1rem;padding:1.5rem}
+.lb-title{font-size:1.5rem;font-weight:800}
+.lb-list{width:100%;max-width:500px;display:flex;flex-direction:column;gap:.5rem}
+.lb-row{display:flex;align-items:center;gap:1rem;background:#1e1e2e;border-radius:12px;padding:.8rem 1rem}
+.lb-rank{font-size:1.2rem;width:28px;text-align:center}.lb-name{flex:1;font-weight:600}.lb-score{font-weight:700;color:#4ecdc4}
+.lb-row:nth-child(1){background:linear-gradient(135deg,#b8860b22,#ffd70033);border:1px solid #ffd700}
+.lb-row:nth-child(2){background:linear-gradient(135deg,#c0c0c022,#c0c0c033);border:1px solid #c0c0c0}
+.lb-row:nth-child(3){background:linear-gradient(135deg,#cd7f3222,#cd7f3233);border:1px solid #cd7f32}
+.error-msg{color:#ff6b6b;font-size:.85rem;text-align:center}
+#cd-overlay{min-height:400px;background:rgba(15,15,26,.97);display:none;align-items:center;justify-content:center;flex-direction:column;gap:1rem}
+#cd-overlay.visible{display:flex}
+.cd-num{font-size:8rem;font-weight:900;animation:cdpop .8s ease}
+@keyframes cdpop{0%{transform:scale(2);opacity:0}60%{transform:scale(.9)}100%{transform:scale(1);opacity:1}}
+.spinner{width:16px;height:16px;border:2px solid #3a3a5e;border-top-color:#4ecdc4;border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<div id="cd-overlay">
+  <div id="cd-num" class="cd-num">3</div>
+  <div style="color:#aaa;font-size:1.2rem">Préparez-vous !</div>
+</div>
+
+<!-- HOME -->
+<div id="home" class="screen active">
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.5rem;flex:1;padding:2rem">
+    <div class="logo">Quiz<span>Live</span></div>
+
+    <div class="api-box">
+      <label>🔑 Identifiants Pusher</label>
+      <div style="font-size:.75rem;color:#555;margin-bottom:.2rem">Dashboard Pusher → App Keys</div>
+      <div class="api-grid">
+        <div><label>App ID</label><input id="p-appid" placeholder="1234567"></div>
+        <div><label>App Key</label><input id="p-key" placeholder="abc123def456"></div>
+        <div><label>App Secret</label><input id="p-secret" placeholder="secret..." type="password"></div>
+        <div><label>Cluster</label><input id="p-cluster" placeholder="eu" value="eu"></div>
+      </div>
+      <button class="btn btn-dark btn-sm" style="align-self:flex-start;margin-top:.2rem" onclick="testPusher()">Tester la connexion</button>
+      <div class="api-status idle" id="api-status">→ Remplissez les 4 champs puis testez</div>
+      <a href="https://dashboard.pusher.com" target="_blank" style="font-size:.73rem;color:#4ecdc4;text-decoration:none">Ouvrir le dashboard Pusher →</a>
+    </div>
+
+    <div class="home-btns">
+      <button class="btn btn-primary" onclick="goHostSetup()">🎮 Créer un quiz</button>
+      <button class="btn btn-secondary" onclick="showScreen('player-join')">📱 Rejoindre</button>
+    </div>
+    <div class="error-msg" id="home-error"></div>
+    <button onclick="toggleMute()" id="mute-btn" style="background:none;border:none;color:#555;cursor:pointer;font-size:.8rem">🔊 Son activé</button>
+  </div>
+</div>
+
+<!-- HOST SETUP -->
+<div id="host-setup" class="screen">
+  <div style="display:flex;align-items:center;gap:1rem;padding:1rem 1.5rem;border-bottom:1px solid #2a2a3e;flex-shrink:0">
+    <button class="btn btn-dark btn-sm" onclick="showScreen('home')">← Retour</button>
+    <span style="font-weight:700;font-size:1.1rem">Créateur de quiz</span>
+  </div>
+  <div style="padding:1rem 1.5rem;display:flex;flex-direction:column;gap:1rem;overflow-y:auto;flex:1">
+    <div class="panel">
+      <h2>Nouvelle question</h2>
+      <div class="field"><label>Question</label><textarea id="q-text" placeholder="Ex: Quelle est la capitale de la France ?"></textarea></div>
+      <div class="field"><label>Image (optionnel)</label>
+        <div class="img-upload-area">
+          <input type="file" accept="image/*" onchange="handleImg(event)">
+          <div id="upload-hint" style="color:#aaa;font-size:.85rem">📷 Cliquer pour ajouter une image</div>
+          <img id="img-preview" class="img-preview">
+        </div>
+        <button class="btn btn-dark btn-sm" style="margin-top:.3rem;display:none" id="rm-img" onclick="removeImg()">✕ Retirer</button>
+      </div>
+      <div class="field"><label>Durée</label><select id="q-time"><option value="10">10s</option><option value="20" selected>20s</option><option value="30">30s</option><option value="60">60s</option></select></div>
+      <div style="font-size:.8rem;color:#aaa;margin-bottom:.5rem">Réponses — ✓ = bonne réponse</div>
+      <div class="answers-grid">
+        <div class="answer-field"><span class="answer-dot" style="background:#e94e77"></span><input id="a0" placeholder="Réponse 1"><button class="correct-check" onclick="setCorrect(0)" id="c0">○</button></div>
+        <div class="answer-field"><span class="answer-dot" style="background:#4ecdc4"></span><input id="a1" placeholder="Réponse 2"><button class="correct-check" onclick="setCorrect(1)" id="c1">○</button></div>
+        <div class="answer-field"><span class="answer-dot" style="background:#ffe66d"></span><input id="a2" placeholder="Réponse 3"><button class="correct-check" onclick="setCorrect(2)" id="c2">○</button></div>
+        <div class="answer-field"><span class="answer-dot" style="background:#a29bfe"></span><input id="a3" placeholder="Réponse 4"><button class="correct-check" onclick="setCorrect(3)" id="c3">○</button></div>
+      </div>
+      <div class="toolbar" style="margin-top:.8rem">
+        <button class="btn btn-primary btn-sm" onclick="addQ()">+ Ajouter</button>
+        <button class="btn btn-dark btn-sm" onclick="clearForm()">Effacer</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Quiz (<span id="q-count">0</span> questions)</h2>
+      <div class="q-list" id="q-list"><p style="color:#555;font-size:.85rem">Aucune question</p></div>
+      <div class="error-msg" id="setup-error" style="margin-top:.5rem"></div>
+      <button class="btn btn-primary" style="margin-top:1rem;width:100%" onclick="startLobby()" id="start-btn" disabled>🚀 Créer la salle</button>
+    </div>
+  </div>
+</div>
+
+<!-- HOST LOBBY -->
+<div id="host-lobby" class="screen">
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:1.2rem;padding:1.5rem;text-align:center">
+    <div style="color:#aaa;font-size:1rem">PIN DE LA PARTIE</div>
+    <div class="game-pin" id="display-pin">----</div>
+    <div id="qr-container"><div id="qrcode"></div></div>
+    <p style="color:#aaa;font-size:.85rem">Scannez depuis n'importe quel réseau 📱</p>
+    <div style="font-weight:700;color:#aaa" id="player-count-label">0 joueur(s)</div>
+    <div class="players-grid" id="players-grid"></div>
+    <button class="btn btn-primary" onclick="startCountdown()" id="launch-btn" disabled>▶ Lancer la partie</button>
+    <button class="btn btn-dark btn-sm" onclick="goHome()">Annuler</button>
+  </div>
+</div>
+
+<!-- HOST GAME -->
+<div id="host-game" class="screen">
+  <div style="display:flex;justify-content:space-between;align-items:center;padding:1rem;gap:1rem">
+    <span style="color:#aaa;font-size:.9rem" id="q-counter">Q 1/1</span>
+    <div class="ring-wrap">
+      <svg width="80" height="80" viewBox="0 0 80 80"><circle class="ring-bg" cx="40" cy="40" r="34"/><circle class="ring-fg" id="host-ring" cx="40" cy="40" r="34" stroke="#4ecdc4" stroke-dasharray="213.6" stroke-dashoffset="0"/></svg>
+      <div class="ring-num" id="timer-num">20</div>
+    </div>
+  </div>
+  <div style="padding:0 1rem;display:flex;flex-direction:column;gap:.8rem;flex:1">
+    <img id="q-img-host" class="q-image-host">
+    <div class="big-question" id="host-q-text"></div>
+    <div><div class="answer-count" id="ans-count">0</div><div class="answer-sublabel" id="ans-label">réponses reçues</div></div>
+    <div class="answers-host" id="host-answers"></div>
+    <div class="live-scores" id="live-scores" style="display:none"><div style="font-size:.8rem;color:#aaa;margin-bottom:.4rem">Classement live</div><div id="live-list"></div></div>
+    <div style="display:flex;gap:.5rem;margin-top:auto;padding-bottom:.5rem;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" onclick="revealAnswers()" id="reveal-btn">Révéler</button>
+      <button class="btn btn-secondary btn-sm" onclick="nextQ()" id="next-btn" style="display:none">Suivante →</button>
+      <button class="btn btn-dark btn-sm" onclick="endGame()" id="end-btn" style="display:none">🏆 Final</button>
+    </div>
+  </div>
+</div>
+
+<!-- PLAYER JOIN -->
+<div id="player-join" class="screen">
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:1.5rem;padding:2rem">
+    <div style="font-size:2rem;font-weight:900">📱 Rejoindre</div>
+    <input class="pin-input" id="join-pin" placeholder="PIN" maxlength="4" oninput="this.value=this.value.toUpperCase()">
+    <input class="name-input" id="join-name" placeholder="Votre pseudo" maxlength="16">
+    <div class="error-msg" id="join-error"></div>
+    <button class="btn btn-primary" style="width:100%;max-width:320px" onclick="joinGame()">Rejoindre →</button>
+    <button class="btn btn-dark btn-sm" onclick="showScreen('home')">← Retour</button>
+  </div>
+</div>
+
+<!-- PLAYER WAIT -->
+<div id="player-wait" class="screen">
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:1rem;padding:2rem;text-align:center">
+    <div style="font-size:3rem">🎮</div>
+    <div class="wait-name" id="wait-name">Joueur</div>
+    <div class="pulse" style="color:#aaa">En attente du lancement...</div>
+  </div>
+</div>
+
+<!-- PLAYER ANSWER -->
+<div id="player-answer" class="screen">
+  <div style="padding:1rem;display:flex;flex-direction:column;gap:.8rem;flex:1">
+    <div style="display:flex;justify-content:center">
+      <div class="ring-wrap">
+        <svg width="80" height="80" viewBox="0 0 80 80"><circle class="ring-bg" cx="40" cy="40" r="34"/><circle class="ring-fg" id="player-ring" cx="40" cy="40" r="34" stroke="#4ecdc4" stroke-dasharray="213.6" stroke-dashoffset="0"/></svg>
+        <div class="ring-num" id="player-timer">20</div>
+      </div>
+    </div>
+    <img id="q-img-player" class="q-image-player">
+    <div class="player-q" id="player-q-text"></div>
+    <div class="player-answers" id="player-answers"></div>
+  </div>
+</div>
+
+<!-- PLAYER RESULT -->
+<div id="player-result" class="screen">
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:1.2rem;padding:2rem;text-align:center">
+    <div class="result-icon" id="result-icon">✅</div>
+    <div id="result-msg" style="font-size:1.2rem;font-weight:700"></div>
+    <div class="result-score" id="result-score"></div>
+    <div id="total-pts" style="color:#aaa;font-size:1rem"></div>
+  </div>
+</div>
+
+<!-- LEADERBOARD -->
+<div id="leaderboard" class="screen">
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:1rem;padding:1.5rem">
+    <div class="lb-title">🏆 Classement final</div>
+    <div class="lb-list" id="lb-list"></div>
+    <button class="btn btn-primary" onclick="goHome()">Nouvelle partie</button>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════
+   ARCHITECTURE :
+   - Hôte publie via API REST Pusher (avec signature HMAC)
+   - Joueurs publient aussi via API REST Pusher
+   - Tout le monde s'abonne en lecture via le SDK Pusher
+   - Canal public "quiz-PIN" — pas d'auth serveur nécessaire
+══════════════════════════════════════════════════════ */
+
+const SHAPES=['▲','◆','●','★'];
+const COLORS=['#e94e77','#4ecdc4','#ffe66d','#a29bfe'];
+const TC=['#fff','#0f0f1a','#1a1a1a','#fff'];
+const CIRC=213.6;
+
+let G={
+  role:null,pin:null,questions:[],currentQ:0,
+  myName:null,myAnswered:false,myLastIdx:-1,
+  timerIv:null,timerLeft:0,revealed:false,
+  scores:{},roundAnswers:{},muted:false,
+  pusher:null,channel:null,ready:false,
+  pendingImg:null,correctIdx:-1,editingIdx:-1,
+};
+
+function cfg(){
+  return {
+    appId:document.getElementById('p-appid').value.trim(),
+    key:document.getElementById('p-key').value.trim(),
+    secret:document.getElementById('p-secret').value.trim(),
+    cluster:document.getElementById('p-cluster').value.trim()||'eu',
+  };
+}
+
+/* ── Signature HMAC-SHA256 ─────────────────────────── */
+async function hmac(secret,msg){
+  const enc=new TextEncoder();
+  const k=await crypto.subtle.importKey('raw',enc.encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+  const s=await crypto.subtle.sign('HMAC',k,enc.encode(msg));
+  return Array.from(new Uint8Array(s)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+/* ── MD5 (pour body_md5 Pusher) ───────────────────── */
+function md5(str){
+  function L(x,y){let l=(x&0xFFFF)+(y&0xFFFF);return(((x>>16)+(y>>16)+(l>>16))<<16)|(l&0xFFFF);}
+  function R(n,c){return(n<<c)|(n>>>(32-c));}
+  function C(q,a,b,x,s,t){return L(R(L(L(a,q),L(x,t)),s),b);}
+  function FF(a,b,c,d,x,s,t){return C((b&c)|((~b)&d),a,b,x,s,t);}
+  function GG(a,b,c,d,x,s,t){return C((b&d)|(c&(~d)),a,b,x,s,t);}
+  function HH(a,b,c,d,x,s,t){return C(b^c^d,a,b,x,s,t);}
+  function II(a,b,c,d,x,s,t){return C(c^(b|(~d)),a,b,x,s,t);}
+  function s2b(s){let r={};for(let i=0;i<s.length*8;i+=8)r[i>>5]|=(s.charCodeAt(i/8)&0xFF)<<(i%32);return r;}
+  function b2h(a){let h='0123456789abcdef',s='';for(let i=0;i<a.length*4;i++)s+=h[(a[i>>2]>>((i%4)*8+4))&0xF]+h[(a[i>>2]>>((i%4)*8))&0xF];return s;}
+  function core(x,l){
+    x[l>>5]|=0x80<<(l%32);x[(((l+64)>>>9)<<4)+14]=l;
+    let a=1732584193,b=-271733879,c=-1732584194,d=271733878;
+    for(let i=0;i<x.length;i+=16){
+      let A=a,B=b,C=c,D=d;
+      a=FF(a,b,c,d,x[i+0],7,-680876936);d=FF(d,a,b,c,x[i+1],12,-389564586);c=FF(c,d,a,b,x[i+2],17,606105819);b=FF(b,c,d,a,x[i+3],22,-1044525330);
+      a=FF(a,b,c,d,x[i+4],7,-176418897);d=FF(d,a,b,c,x[i+5],12,1200080426);c=FF(c,d,a,b,x[i+6],17,-1473231341);b=FF(b,c,d,a,x[i+7],22,-45705983);
+      a=FF(a,b,c,d,x[i+8],7,1770035416);d=FF(d,a,b,c,x[i+9],12,-1958414417);c=FF(c,d,a,b,x[i+10],17,-42063);b=FF(b,c,d,a,x[i+11],22,-1990404162);
+      a=FF(a,b,c,d,x[i+12],7,1804603682);d=FF(d,a,b,c,x[i+13],12,-40341101);c=FF(c,d,a,b,x[i+14],17,-1502002290);b=FF(b,c,d,a,x[i+15],22,1236535329);
+      a=GG(a,b,c,d,x[i+1],5,-165796510);d=GG(d,a,b,c,x[i+6],9,-1069501632);c=GG(c,d,a,b,x[i+11],14,643717713);b=GG(b,c,d,a,x[i+0],20,-373897302);
+      a=GG(a,b,c,d,x[i+5],5,-701558691);d=GG(d,a,b,c,x[i+10],9,38016083);c=GG(c,d,a,b,x[i+15],14,-660478335);b=GG(b,c,d,a,x[i+4],20,-405537848);
+      a=GG(a,b,c,d,x[i+9],5,568446438);d=GG(d,a,b,c,x[i+14],9,-1019803690);c=GG(c,d,a,b,x[i+3],14,-187363961);b=GG(b,c,d,a,x[i+8],20,1163531501);
+      a=GG(a,b,c,d,x[i+13],5,-1444681467);d=GG(d,a,b,c,x[i+2],9,-51403784);c=GG(c,d,a,b,x[i+7],14,1735328473);b=GG(b,c,d,a,x[i+12],20,-1926607734);
+      a=HH(a,b,c,d,x[i+5],4,-378558);d=HH(d,a,b,c,x[i+8],11,-2022574463);c=HH(c,d,a,b,x[i+11],16,1839030562);b=HH(b,c,d,a,x[i+14],23,-35309556);
+      a=HH(a,b,c,d,x[i+1],4,-1530992060);d=HH(d,a,b,c,x[i+4],11,1272893353);c=HH(c,d,a,b,x[i+7],16,-155497632);b=HH(b,c,d,a,x[i+10],23,-1094730640);
+      a=HH(a,b,c,d,x[i+13],4,681279174);d=HH(d,a,b,c,x[i+0],11,-358537222);c=HH(c,d,a,b,x[i+3],16,-722521979);b=HH(b,c,d,a,x[i+6],23,76029189);
+      a=HH(a,b,c,d,x[i+9],4,-640364487);d=HH(d,a,b,c,x[i+12],11,-421815835);c=HH(c,d,a,b,x[i+15],16,530742520);b=HH(b,c,d,a,x[i+2],23,-995338651);
+      a=II(a,b,c,d,x[i+0],6,-198630844);d=II(d,a,b,c,x[i+7],10,1126891415);c=II(c,d,a,b,x[i+14],15,-1416354905);b=II(b,c,d,a,x[i+5],21,-57434055);
+      a=II(a,b,c,d,x[i+12],6,1700485571);d=II(d,a,b,c,x[i+3],10,-1894986606);c=II(c,d,a,b,x[i+10],15,-1051523);b=II(b,c,d,a,x[i+1],21,-2054922799);
+      a=II(a,b,c,d,x[i+8],6,1873313359);d=II(d,a,b,c,x[i+15],10,-30611744);c=II(c,d,a,b,x[i+6],15,-1560198380);b=II(b,c,d,a,x[i+13],21,1309151649);
+      a=II(a,b,c,d,x[i+4],6,-145523070);d=II(d,a,b,c,x[i+11],10,-1120210379);c=II(c,d,a,b,x[i+2],15,718787259);b=II(b,c,d,a,x[i+9],21,-343485551);
+      a=L(a,A);b=L(b,B);c=L(c,C);d=L(d,D);
+    }
+    return[a,b,c,d];
+  }
+  return b2h(core(s2b(str),str.length*8));
+}
+
+/* ── Publier via REST Pusher ───────────────────────── */
+async function pub(event, data){
+  const {appId,key,secret,cluster}=cfg();
+  if(!appId||!key||!secret){console.warn('Config Pusher manquante');return;}
+  const channel='quiz-'+G.pin;
+  const body=JSON.stringify({name:event,channel,data:JSON.stringify(data)});
+  const ts=Math.floor(Date.now()/1000).toString();
+  const bodyMd5=md5(body);
+  const path=`/apps/${appId}/events`;
+  const toSign=`POST\n${path}\nauth_key=${key}&auth_timestamp=${ts}&auth_version=1.0&body_md5=${bodyMd5}`;
+  const sig=await hmac(secret,toSign);
+  const qs=`auth_key=${key}&auth_timestamp=${ts}&auth_version=1.0&body_md5=${bodyMd5}&auth_signature=${sig}`;
+  const url=`https://api-${cluster}.pusher.com${path}?${qs}`;
+  try{
+    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body});
+    if(!r.ok){const t=await r.text();console.error('Pusher REST error',r.status,t);}
+  }catch(e){console.error('Pusher fetch error',e);}
+}
+
+/* ── Connexion Pusher (abonnement lecture) ─────────── */
+function testPusher(){
+  const {key,cluster}=cfg();
+  const st=document.getElementById('api-status');
+  const {appId,secret}=cfg();
+  if(!appId||!key||!secret||!cluster){st.className='api-status err';st.textContent='✗ Remplissez les 4 champs';return;}
+  st.className='api-status idle';st.innerHTML='<div class="spinner"></div> Connexion...';
+  if(G.pusher){try{G.pusher.disconnect();}catch(e){}G.pusher=null;}G.ready=false;
+  try{
+    const p=new Pusher(key,{cluster,forceTLS:true});
+    G.pusher=p;
+    p.connection.bind('connected',()=>{
+      G.ready=true;
+      st.className='api-status ok';st.textContent='✓ Connecté ! Vous pouvez créer un quiz.';
+    });
+    p.connection.bind('failed',()=>{
+      st.className='api-status err';st.textContent='✗ Échec — vérifiez App Key et Cluster';
+    });
+    setTimeout(()=>{if(!G.ready){st.className='api-status err';st.textContent='✗ Timeout — vérifiez votre connexion';}},8000);
+  }catch(e){st.className='api-status err';st.textContent='✗ Erreur : '+e.message;}
+}
+
+function subChannel(pin){
+  if(G.channel)try{G.pusher.unsubscribe('quiz-'+G.pin);}catch(e){}
+  G.channel=G.pusher.subscribe('quiz-'+pin);
+  return G.channel;
+}
+
+/* ── Nav ───────────────────────────────────────────── */
+function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
+function goHome(){
+  clearInterval(G.timerIv);
+  if(G.pusher&&G.pin)try{G.pusher.unsubscribe('quiz-'+G.pin);}catch(e){}
+  const keep={muted:G.muted,pusher:G.pusher,ready:G.ready,questions:G.questions};
+  G={role:null,pin:null,questions:keep.questions,currentQ:0,myName:null,myAnswered:false,myLastIdx:-1,timerIv:null,timerLeft:0,revealed:false,scores:{},roundAnswers:{},muted:keep.muted,pusher:keep.pusher,channel:null,ready:keep.ready,pendingImg:null,correctIdx:-1,editingIdx:-1};
+  showScreen('home');
+}
+
+/* ── Question builder ──────────────────────────────── */
+function setCorrect(i){G.correctIdx=i;for(let j=0;j<4;j++){document.getElementById('c'+j).textContent=j===i?'✓':'○';document.getElementById('c'+j).className='correct-check'+(j===i?' on':'');}}
+function clearForm(){document.getElementById('q-text').value='';for(let i=0;i<4;i++)document.getElementById('a'+i).value='';G.correctIdx=-1;G.editingIdx=-1;for(let j=0;j<4;j++){document.getElementById('c'+j).textContent='○';document.getElementById('c'+j).className='correct-check';}removeImg();}
+function handleImg(e){const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>{G.pendingImg=ev.target.result;const p=document.getElementById('img-preview');p.src=G.pendingImg;p.style.display='block';document.getElementById('upload-hint').style.display='none';document.getElementById('rm-img').style.display='';};r.readAsDataURL(f);}
+function removeImg(){G.pendingImg=null;document.getElementById('img-preview').style.display='none';document.getElementById('img-preview').src='';document.getElementById('upload-hint').style.display='';document.getElementById('rm-img').style.display='none';}
+function addQ(){
+  const text=document.getElementById('q-text').value.trim();
+  const answers=[0,1,2,3].map(i=>document.getElementById('a'+i).value.trim());
+  const err=document.getElementById('setup-error');
+  if(!text){err.textContent='Entrez la question.';return;}
+  if(answers.filter(a=>a).length<2){err.textContent='Au moins 2 réponses.';return;}
+  if(G.correctIdx<0){err.textContent='Marquez la bonne réponse (✓).';return;}
+  err.textContent='';
+  const q={text,answers,correct:G.correctIdx,time:parseInt(document.getElementById('q-time').value),image:G.pendingImg||null};
+  if(G.editingIdx>=0){G.questions[G.editingIdx]=q;G.editingIdx=-1;}else G.questions.push(q);
+  renderQList();clearForm();
+}
+function renderQList(){
+  const n=G.questions.length;document.getElementById('q-count').textContent=n;document.getElementById('start-btn').disabled=n===0;
+  const list=document.getElementById('q-list');
+  if(!n){list.innerHTML='<p style="color:#555;font-size:.85rem">Aucune question</p>';return;}
+  list.innerHTML=G.questions.map((q,i)=>`<div class="q-item" onclick="editQ(${i})"><span style="display:flex;align-items:center;gap:.5rem"><span class="q-num">${i+1}</span>${q.image?'<span>🖼️</span>':''}<span>${q.text.substring(0,35)}${q.text.length>35?'...':''}</span></span><span style="display:flex;gap:.4rem;align-items:center"><span class="tag">${q.time}s</span><button class="btn btn-dark btn-sm" onclick="event.stopPropagation();delQ(${i})">✕</button></span></div>`).join('');
+}
+function editQ(i){const q=G.questions[i];document.getElementById('q-text').value=q.text;for(let j=0;j<4;j++)document.getElementById('a'+j).value=q.answers[j]||'';document.getElementById('q-time').value=q.time;setCorrect(q.correct);if(q.image){G.pendingImg=q.image;const p=document.getElementById('img-preview');p.src=q.image;p.style.display='block';document.getElementById('upload-hint').style.display='none';document.getElementById('rm-img').style.display='';}G.editingIdx=i;}
+function delQ(i){G.questions.splice(i,1);renderQList();}
+
+/* ── Host lobby ────────────────────────────────────── */
+function goHostSetup(){
+  if(!G.ready){document.getElementById('home-error').textContent='Validez d\'abord la connexion Pusher.';return;}
+  document.getElementById('home-error').textContent='';showScreen('host-setup');
+}
+
+function startLobby(){
+  if(!G.ready){document.getElementById('setup-error').textContent='Pusher non connecté.';return;}
+  G.role='host';G.pin=Math.random().toString(36).substr(2,4).toUpperCase();
+  G.scores={};G.currentQ=0;G.roundAnswers={};
+
+  const ch=subChannel(G.pin);
+  // Hôte écoute les joins et réponses des joueurs
+  ch.bind('join',({name})=>{
+    if(G.scores[name]!==undefined)return;
+    G.scores[name]=0;
+    const b=document.createElement('div');b.className='player-badge';b.textContent=name;
+    document.getElementById('players-grid').appendChild(b);
+    const count=Object.keys(G.scores).length;
+    document.getElementById('player-count-label').textContent=`${count} joueur(s)`;
+    document.getElementById('launch-btn').disabled=false;
+    playJoin();
+    // Confirmer au joueur qu'il a bien rejoint
+    pub('join_ok',{name});
+  });
+  ch.bind('answer',({name,idx})=>{
+    if(!G.revealed&&G.roundAnswers[name]===undefined){
+      G.roundAnswers[name]=idx;
+      const c=Object.keys(G.roundAnswers).length;
+      document.getElementById('ans-count').textContent=c;
+      document.getElementById('ans-label').textContent=`réponse${c>1?'s':''} reçue${c>1?'s':''}`;
+      playTone(600+c*30,.05,'sine',.1);
+    }
+  });
+
+  document.getElementById('display-pin').textContent=G.pin;
+  document.getElementById('players-grid').innerHTML='';
+  document.getElementById('player-count-label').textContent='0 joueur(s)';
+  document.getElementById('launch-btn').disabled=true;
+
+  const {key,cluster}=cfg();
+  const joinUrl=`${location.origin}${location.pathname}?key=${encodeURIComponent(key)}&cluster=${encodeURIComponent(cluster)}&pin=${G.pin}`;
+  document.getElementById('qr-container').innerHTML='<div id="qrcode"></div>';
+  try{new QRCode(document.getElementById('qrcode'),{text:joinUrl,width:160,height:160,colorDark:'#0f0f1a',colorLight:'#ffffff'});}catch(e){}
+  showScreen('host-lobby');
+}
+
+/* ── Countdown ─────────────────────────────────────── */
+function startCountdown(){
+  const ov=document.getElementById('cd-overlay'),num=document.getElementById('cd-num');
+  ov.classList.add('visible');let n=3;num.textContent=n;playCountdown();
+  const iv=setInterval(()=>{n--;
+    if(n>0){num.style.animation='none';void num.offsetWidth;num.style.animation='cdpop .8s ease';num.textContent=n;playCountdown();}
+    else{num.textContent='GO !';num.style.animation='none';void num.offsetWidth;num.style.animation='cdpop .5s ease';playGo();clearInterval(iv);
+      setTimeout(()=>{ov.classList.remove('visible');pub('game_start',{});launchQ();},700);}
+  },900);
+}
+
+/* ── Host game ─────────────────────────────────────── */
+function launchQ(){
+  G.revealed=false;G.roundAnswers={};
+  const q=G.questions[G.currentQ];
+  document.getElementById('q-counter').textContent=`Q ${G.currentQ+1}/${G.questions.length}`;
+  document.getElementById('host-q-text').textContent=q.text;
+  document.getElementById('ans-count').textContent='0';document.getElementById('ans-label').textContent='réponses reçues';
+  document.getElementById('live-scores').style.display='none';
+  document.getElementById('reveal-btn').style.display='';document.getElementById('next-btn').style.display='none';document.getElementById('end-btn').style.display='none';
+  const imgEl=document.getElementById('q-img-host');
+  if(q.image){imgEl.src=q.image;imgEl.style.display='block';}else{imgEl.style.display='none';}
+  document.getElementById('host-answers').innerHTML=q.answers.map((a,i)=>`<button class="ans-btn" style="background:${COLORS[i]};color:${TC[i]}" disabled><span style="font-size:1.2rem">${SHAPES[i]}</span>${a}</button>`).join('');
+  // On n'envoie pas les images base64 (trop lourd pour Pusher 10KB/msg)
+  pub('question',{idx:G.currentQ,text:q.text,answers:q.answers,time:q.time});
+  startRing('host-ring','timer-num',q.time,()=>revealAnswers());
+  showScreen('host-game');
+}
+
+function revealAnswers(){
+  if(G.revealed)return;G.revealed=true;clearInterval(G.timerIv);setRing('host-ring',0);
+  const correct=G.questions[G.currentQ].correct;
+  Object.entries(G.roundAnswers).forEach(([n,idx])=>{if(idx===correct)G.scores[n]=(G.scores[n]||0)+1000;});
+  document.getElementById('host-answers').querySelectorAll('.ans-btn').forEach((b,i)=>{if(i!==correct)b.style.opacity='.25';else b.style.boxShadow='0 0 0 4px #fff';});
+  pub('reveal',{correct,scores:G.scores});
+  renderLiveScores(G.scores);
+  document.getElementById('reveal-btn').style.display='none';
+  const isLast=G.currentQ>=G.questions.length-1;
+  document.getElementById('next-btn').style.display=isLast?'none':'';
+  document.getElementById('end-btn').style.display=isLast?'':'none';
+}
+
+function nextQ(){G.currentQ++;launchQ();}
+function endGame(){pub('game_end',{scores:G.scores});showFinalLB(G.scores);}
+function showFinalLB(scores){
+  const sorted=Object.entries(scores).sort((a,b)=>b[1]-a[1]);const medals=['🥇','🥈','🥉'];
+  document.getElementById('lb-list').innerHTML=sorted.map(([n,s],i)=>`<div class="lb-row"><span class="lb-rank">${medals[i]||i+1}</span><span class="lb-name">${n}</span><span class="lb-score">${s} pts</span></div>`).join('');
+  showScreen('leaderboard');
+}
+function renderLiveScores(scores){
+  document.getElementById('live-scores').style.display='';
+  const sorted=Object.entries(scores).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  document.getElementById('live-list').innerHTML=sorted.map(([n,s],i)=>`<div class="score-row"><span>${i===0?'🥇':i===1?'🥈':i===2?'🥉':''} ${n}</span><span style="color:#4ecdc4;font-weight:700">${s} pts</span></div>`).join('');
+}
+
+/* ── Player ────────────────────────────────────────── */
+function joinGame(){
+  const pin=document.getElementById('join-pin').value.trim().toUpperCase();
+  const name=document.getElementById('join-name').value.trim();
+  const err=document.getElementById('join-error');
+  if(!G.ready){err.textContent='Pusher non connecté — rechargez la page.';return;}
+  if(!pin||pin.length<4){err.textContent='PIN invalide.';return;}
+  if(!name){err.textContent='Entrez votre pseudo.';return;}
+  err.textContent='';
+  G.role='player';G.pin=pin;G.myName=name;
+
+  const ch=subChannel(pin);
+  ch.bind('join_ok',({name:n})=>{if(n===name){document.getElementById('wait-name').textContent=name;showScreen('player-wait');}});
+  ch.bind('game_start',()=>{});
+  ch.bind('question',(data)=>{
+    G.myAnswered=false;G.myLastIdx=-1;G.currentQ=data.idx;
+    document.getElementById('player-q-text').textContent=data.text;
+    document.getElementById('q-img-player').style.display='none';
+    const pa=document.getElementById('player-answers');
+    pa.innerHTML=data.answers.map((a,i)=>`<button class="player-ans-btn pa-${i}" onclick="submitAns(${i})" style="color:${TC[i]}"><span style="font-size:1.5rem">${SHAPES[i]}</span><span>${a}</span></button>`).join('');
+    startRing('player-ring','player-timer',data.time);
+    showScreen('player-answer');
+  });
+  ch.bind('reveal',({correct,scores})=>{
+    clearInterval(G.timerIv);
+    const ok=G.myAnswered&&G.myLastIdx===correct;
+    document.getElementById('result-icon').textContent=ok?'✅':(G.myAnswered?'❌':'⏰');
+    document.getElementById('result-msg').textContent=ok?'Bonne réponse !':(G.myAnswered?'Mauvaise réponse !':'Temps écoulé !');
+    document.getElementById('result-score').textContent=ok?'+1000 pts':'+0 pts';
+    const me=scores[G.myName];document.getElementById('total-pts').textContent=`Total : ${me||0} pts`;
+    ok?playCorrect():playWrong();showScreen('player-result');
+  });
+  ch.bind('game_end',({scores})=>{
+    clearInterval(G.timerIv);
+    const me=scores[G.myName];
+    document.getElementById('result-icon').textContent='🏁';document.getElementById('result-msg').textContent='Partie terminée !';
+    document.getElementById('result-score').textContent=`${me||0} pts`;document.getElementById('total-pts').textContent='Score final';
+    showScreen('player-result');
+  });
+
+  // Envoyer le join via REST (avec les credentials dans l'URL)
+  pub('join',{name});
+  // Afficher l'écran d'attente directement
+  document.getElementById('wait-name').textContent=name;
+  showScreen('player-wait');
+}
+
+function submitAns(idx){
+  if(G.myAnswered)return;G.myAnswered=true;G.myLastIdx=idx;
+  pub('answer',{name:G.myName,idx});
+  playTone(700,.1,'sine',.2);
+  document.querySelectorAll('.player-ans-btn').forEach((b,i)=>{b.disabled=true;b.style.opacity=i===idx?'1':'.2';b.style.transform=i===idx?'scale(1.05)':'scale(1)';});
+}
+
+/* ── Timer ─────────────────────────────────────────── */
+function setRing(id,ratio){const r=document.getElementById(id);if(!r)return;r.style.strokeDashoffset=CIRC*(1-ratio);r.style.stroke=ratio>.5?'#4ecdc4':ratio>.25?'#ffe66d':'#ff6b6b';}
+function startRing(ringId,numId,sec,onEnd){
+  clearInterval(G.timerIv);G.timerLeft=sec;document.getElementById(numId).textContent=sec;setRing(ringId,1);
+  G.timerIv=setInterval(()=>{G.timerLeft--;const ratio=G.timerLeft/sec;document.getElementById(numId).textContent=G.timerLeft;setRing(ringId,ratio);
+    if(G.timerLeft<=5&&G.timerLeft>0)playUrgent();else if(G.timerLeft>0)playTick();
+    if(G.timerLeft<=0){clearInterval(G.timerIv);if(onEnd)onEnd();}
+  },1000);
+}
+
+/* ── Audio ─────────────────────────────────────────── */
+let audioCtx=null;
+function getAC(){if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();return audioCtx;}
+function playTone(freq,dur,type='sine',vol=.3){if(G.muted)return;try{const ctx=getAC();const o=ctx.createOscillator();const gn=ctx.createGain();o.connect(gn);gn.connect(ctx.destination);o.type=type;o.frequency.setValueAtTime(freq,ctx.currentTime);gn.gain.setValueAtTime(vol,ctx.currentTime);gn.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+dur);o.start(ctx.currentTime);o.stop(ctx.currentTime+dur);}catch(e){}}
+function playCorrect(){[523,659,784,1047].forEach((f,i)=>setTimeout(()=>playTone(f,.15,'sine',.25),i*80));}
+function playWrong(){playTone(200,.4,'sawtooth',.2);setTimeout(()=>playTone(150,.3,'sawtooth',.15),200);}
+function playTick(){playTone(880,.05,'square',.08);}
+function playUrgent(){playTone(660,.1,'square',.15);}
+function playCountdown(){playTone(440,.15,'sine',.3);}
+function playGo(){[440,550,660].forEach((f,i)=>setTimeout(()=>playTone(f,.2,'sine',.35),i*100));}
+function playJoin(){playTone(800,.1,'sine',.2);}
+function toggleMute(){G.muted=!G.muted;document.getElementById('mute-btn').textContent=G.muted?'🔇 Son désactivé':'🔊 Son activé';}
+
+/* ── Auto-join via URL ─────────────────────────────── */
+const P=new URLSearchParams(location.search);
+if(P.get('key')&&P.get('cluster')){
+  document.getElementById('p-key').value=decodeURIComponent(P.get('key'));
+  document.getElementById('p-cluster').value=decodeURIComponent(P.get('cluster'));
+  // Les joueurs n'ont pas besoin de appId/secret pour s'abonner
+  // On initialise Pusher en lecture seule
+  const k=decodeURIComponent(P.get('key'));
+  const cl=decodeURIComponent(P.get('cluster'));
+  try{
+    G.pusher=new Pusher(k,{cluster:cl,forceTLS:true});
+    G.pusher.connection.bind('connected',()=>{G.ready=true;});
+  }catch(e){}
+  if(P.get('pin')){
+    setTimeout(()=>{document.getElementById('join-pin').value=P.get('pin');showScreen('player-join');},800);
+  }
+}
+</script>
+</body>
+</html>
