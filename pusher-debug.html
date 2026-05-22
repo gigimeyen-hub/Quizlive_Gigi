@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pusher Debug</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pusher/8.3.0/pusher.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:monospace;background:#0f0f1a;color:#fff;padding:1.5rem;font-size:.85rem}
+h2{color:#ff6b6b;margin-bottom:1rem;font-size:1rem}
+.row{display:flex;gap:.5rem;margin-bottom:.5rem;align-items:center;flex-wrap:wrap}
+input{background:#1e1e2e;border:1px solid #3a3a5e;border-radius:6px;color:#fff;padding:.5rem .7rem;font-family:monospace;font-size:.83rem;flex:1;min-width:120px}
+button{background:#ff6b6b;color:#fff;border:none;border-radius:6px;padding:.5rem 1rem;cursor:pointer;font-weight:700;font-size:.82rem;white-space:nowrap}
+button.sec{background:#2a2a3e}
+.log{background:#1e1e2e;border-radius:8px;padding:1rem;margin-top:1rem;min-height:200px;max-height:400px;overflow-y:auto;line-height:1.8}
+.ok{color:#4ecdc4}.err{color:#ff6b6b}.warn{color:#ffe66d}.info{color:#aaa}
+label{color:#aaa;font-size:.78rem;min-width:70px}
+</style>
+</head>
+<body>
+<h2>🔧 Pusher Debug Tool</h2>
+
+<div class="row"><label>App ID</label><input id="appid" placeholder="1234567"></div>
+<div class="row"><label>App Key</label><input id="key" placeholder="abc123def456ghi7"></div>
+<div class="row"><label>App Secret</label><input id="secret" placeholder="secret" type="password"></div>
+<div class="row"><label>Cluster</label><input id="cluster" placeholder="eu" value="eu"></div>
+<div class="row"><label>Canal test</label><input id="channel" placeholder="quiz-TEST" value="quiz-TEST"></div>
+
+<div class="row" style="margin-top:.8rem;gap:.5rem">
+  <button onclick="testConnect()">1. Tester connexion</button>
+  <button onclick="testPublish()">2. Publier message</button>
+  <button onclick="testReceive()">3. S'abonner + écouter</button>
+  <button class="sec" onclick="clearLog()">Effacer</button>
+</div>
+
+<div class="log" id="log"><span class="info">→ Remplissez les champs et cliquez les boutons dans l'ordre...</span></div>
+
+<script>
+let pusher=null, channel=null;
+
+function log(msg, type='info'){
+  const d=document.getElementById('log');
+  const t=new Date().toLocaleTimeString();
+  d.innerHTML+=`\n<span class="${type}">[${t}] ${msg}</span>`;
+  d.scrollTop=d.scrollHeight;
+}
+function clearLog(){document.getElementById('log').innerHTML='';}
+
+function vals(){
+  return {
+    appId:document.getElementById('appid').value.trim(),
+    key:document.getElementById('key').value.trim(),
+    secret:document.getElementById('secret').value.trim(),
+    cluster:document.getElementById('cluster').value.trim()||'eu',
+    chan:document.getElementById('channel').value.trim()||'quiz-TEST',
+  };
+}
+
+function testConnect(){
+  const {key,cluster}=vals();
+  if(!key){log('✗ App Key manquante','err');return;}
+  log(`Connexion à Pusher... key=${key.substring(0,6)}... cluster=${cluster}`);
+  if(pusher)try{pusher.disconnect();}catch(e){}
+  try{
+    pusher=new Pusher(key,{cluster,forceTLS:true});
+    pusher.connection.bind('connecting',()=>log('→ Connexion en cours...'));
+    pusher.connection.bind('connected',()=>{
+      log('✓ Connecté à Pusher ! Socket ID: '+pusher.connection.socket_id,'ok');
+    });
+    pusher.connection.bind('failed',()=>log('✗ Connexion échouée — vérifiez App Key et Cluster','err'));
+    pusher.connection.bind('disconnected',()=>log('Déconnecté','warn'));
+    pusher.connection.bind('error',(e)=>log('Erreur connexion: '+JSON.stringify(e),'err'));
+  }catch(e){log('✗ Exception: '+e.message,'err');}
+}
+
+async function md5(str){
+  function L(x,y){let l=(x&0xFFFF)+(y&0xFFFF);return(((x>>16)+(y>>16)+(l>>16))<<16)|(l&0xFFFF);}
+  function R(n,c){return(n<<c)|(n>>>(32-c));}
+  function C(q,a,b,x,s,t){return L(R(L(L(a,q),L(x,t)),s),b);}
+  function FF(a,b,c,d,x,s,t){return C((b&c)|((~b)&d),a,b,x,s,t);}
+  function GG(a,b,c,d,x,s,t){return C((b&d)|(c&(~d)),a,b,x,s,t);}
+  function HH(a,b,c,d,x,s,t){return C(b^c^d,a,b,x,s,t);}
+  function II(a,b,c,d,x,s,t){return C(c^(b|(~d)),a,b,x,s,t);}
+  function s2b(s){let r={};for(let i=0;i<s.length*8;i+=8)r[i>>5]|=(s.charCodeAt(i/8)&0xFF)<<(i%32);return r;}
+  function b2h(a){let h='0123456789abcdef',s='';for(let i=0;i<a.length*4;i++)s+=h[(a[i>>2]>>((i%4)*8+4))&0xF]+h[(a[i>>2]>>((i%4)*8))&0xF];return s;}
+  function core(x,l){
+    x[l>>5]|=0x80<<(l%32);x[(((l+64)>>>9)<<4)+14]=l;
+    let a=1732584193,b=-271733879,c=-1732584194,d=271733878;
+    for(let i=0;i<x.length;i+=16){
+      let A=a,B=b,C=c,D=d;
+      a=FF(a,b,c,d,x[i+0],7,-680876936);d=FF(d,a,b,c,x[i+1],12,-389564586);c=FF(c,d,a,b,x[i+2],17,606105819);b=FF(b,c,d,a,x[i+3],22,-1044525330);
+      a=FF(a,b,c,d,x[i+4],7,-176418897);d=FF(d,a,b,c,x[i+5],12,1200080426);c=FF(c,d,a,b,x[i+6],17,-1473231341);b=FF(b,c,d,a,x[i+7],22,-45705983);
+      a=FF(a,b,c,d,x[i+8],7,1770035416);d=FF(d,a,b,c,x[i+9],12,-1958414417);c=FF(c,d,a,b,x[i+10],17,-42063);b=FF(b,c,d,a,x[i+11],22,-1990404162);
+      a=FF(a,b,c,d,x[i+12],7,1804603682);d=FF(d,a,b,c,x[i+13],12,-40341101);c=FF(c,d,a,b,x[i+14],17,-1502002290);b=FF(b,c,d,a,x[i+15],22,1236535329);
+      a=GG(a,b,c,d,x[i+1],5,-165796510);d=GG(d,a,b,c,x[i+6],9,-1069501632);c=GG(c,d,a,b,x[i+11],14,643717713);b=GG(b,c,d,a,x[i+0],20,-373897302);
+      a=GG(a,b,c,d,x[i+5],5,-701558691);d=GG(d,a,b,c,x[i+10],9,38016083);c=GG(c,d,a,b,x[i+15],14,-660478335);b=GG(b,c,d,a,x[i+4],20,-405537848);
+      a=GG(a,b,c,d,x[i+9],5,568446438);d=GG(d,a,b,c,x[i+14],9,-1019803690);c=GG(c,d,a,b,x[i+3],14,-187363961);b=GG(b,c,d,a,x[i+8],20,1163531501);
+      a=GG(a,b,c,d,x[i+13],5,-1444681467);d=GG(d,a,b,c,x[i+2],9,-51403784);c=GG(c,d,a,b,x[i+7],14,1735328473);b=GG(b,c,d,a,x[i+12],20,-1926607734);
+      a=HH(a,b,c,d,x[i+5],4,-378558);d=HH(d,a,b,c,x[i+8],11,-2022574463);c=HH(c,d,a,b,x[i+11],16,1839030562);b=HH(b,c,d,a,x[i+14],23,-35309556);
+      a=HH(a,b,c,d,x[i+1],4,-1530992060);d=HH(d,a,b,c,x[i+4],11,1272893353);c=HH(c,d,a,b,x[i+7],16,-155497632);b=HH(b,c,d,a,x[i+10],23,-1094730640);
+      a=HH(a,b,c,d,x[i+13],4,681279174);d=HH(d,a,b,c,x[i+0],11,-358537222);c=HH(c,d,a,b,x[i+3],16,-722521979);b=HH(b,c,d,a,x[i+6],23,76029189);
+      a=HH(a,b,c,d,x[i+9],4,-640364487);d=HH(d,a,b,c,x[i+12],11,-421815835);c=HH(c,d,a,b,x[i+15],16,530742520);b=HH(b,c,d,a,x[i+2],23,-995338651);
+      a=II(a,b,c,d,x[i+0],6,-198630844);d=II(d,a,b,c,x[i+7],10,1126891415);c=II(c,d,a,b,x[i+14],15,-1416354905);b=II(b,c,d,a,x[i+5],21,-57434055);
+      a=II(a,b,c,d,x[i+12],6,1700485571);d=II(d,a,b,c,x[i+3],10,-1894986606);c=II(c,d,a,b,x[i+10],15,-1051523);b=II(b,c,d,a,x[i+1],21,-2054922799);
+      a=II(a,b,c,d,x[i+8],6,1873313359);d=II(d,a,b,c,x[i+15],10,-30611744);c=II(c,d,a,b,x[i+6],15,-1560198380);b=II(b,c,d,a,x[i+13],21,1309151649);
+      a=II(a,b,c,d,x[i+4],6,-145523070);d=II(d,a,b,c,x[i+11],10,-1120210379);c=II(c,d,a,b,x[i+2],15,718787259);b=II(b,c,d,a,x[i+9],21,-343485551);
+      a=L(a,A);b=L(b,B);c=L(c,C);d=L(d,D);
+    }
+    return[a,b,c,d];
+  }
+  return b2h(core(s2b(str),str.length*8));
+}
+
+async function hmac(secret,msg){
+  const enc=new TextEncoder();
+  const k=await crypto.subtle.importKey('raw',enc.encode(secret),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+  const s=await crypto.subtle.sign('HMAC',k,enc.encode(msg));
+  return Array.from(new Uint8Array(s)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+async function testPublish(){
+  const {appId,key,secret,cluster,chan}=vals();
+  if(!appId||!key||!secret){log('✗ App ID, App Key et App Secret requis','err');return;}
+  log(`Publication sur canal "${chan}"...`);
+  const body=JSON.stringify({name:'test',channel:chan,data:JSON.stringify({msg:'Hello depuis le debug !'})});
+  const ts=Math.floor(Date.now()/1000).toString();
+  const bMd5=await md5(body);
+  const path=`/apps/${appId}/events`;
+  const toSign=`POST\n${path}\nauth_key=${key}&auth_timestamp=${ts}&auth_version=1.0&body_md5=${bMd5}`;
+  const sig=await hmac(secret,toSign);
+  const qs=`auth_key=${key}&auth_timestamp=${ts}&auth_version=1.0&body_md5=${bMd5}&auth_signature=${sig}`;
+  const url=`https://api-${cluster}.pusher.com${path}?${qs}`;
+  log(`URL: api-${cluster}.pusher.com/apps/${appId}/events`);
+  try{
+    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body});
+    const text=await r.text();
+    if(r.ok){
+      log(`✓ Message publié ! Réponse: ${text}`,'ok');
+      log('→ Maintenant cliquez "3. S\'abonner + écouter" pour vérifier la réception');
+    } else {
+      log(`✗ Erreur HTTP ${r.status}: ${text}`,'err');
+      if(r.status===401)log('  → App Secret incorrect ou App ID incorrect','err');
+      if(r.status===403)log('  → App ID incorrect ou cluster incorrect','err');
+      if(r.status===400)log('  → Requête malformée — vérifiez App ID','err');
+    }
+  }catch(e){
+    log('✗ Fetch échoué: '+e.message,'err');
+    log('  → Problème CORS ou réseau. Essayez depuis GitHub Pages (pas en local).','warn');
+  }
+}
+
+function testReceive(){
+  const {key,cluster,chan}=vals();
+  if(!pusher){log('✗ Connectez-vous d\'abord (bouton 1)','err');return;}
+  log(`Abonnement au canal "${chan}"...`);
+  if(channel)pusher.unsubscribe(chan);
+  channel=pusher.subscribe(chan);
+  channel.bind('pusher:subscription_succeeded',()=>log(`✓ Abonné à "${chan}" — en attente de messages...`,'ok'));
+  channel.bind('pusher:subscription_error',(e)=>log('✗ Erreur abonnement: '+JSON.stringify(e),'err'));
+  channel.bind_global((event,data)=>{
+    if(event.startsWith('pusher:'))return;
+    log(`✓ Message reçu ! event="${event}" data=${JSON.stringify(data)}`,'ok');
+  });
+  log('→ Maintenant cliquez "2. Publier message" dans un autre onglet ou sur un autre appareil');
+}
+</script>
+</body>
+</html>
